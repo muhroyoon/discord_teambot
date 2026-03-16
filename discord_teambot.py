@@ -16,15 +16,12 @@ def create_balanced_teams(players, team_size):
 
     random.shuffle(players)
 
-    team_count = max(1, len(players) // team_size)
-
-    teams = [[] for _ in range(team_count)]
-
-    for i, player in enumerate(players):
-        teams[i % team_count].append(player)
+    teams = [
+        players[i:i + team_size]
+        for i in range(0, len(players), team_size)
+    ]
 
     return teams
-
 
 class ShuffleView(discord.ui.View):
 
