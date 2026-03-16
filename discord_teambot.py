@@ -174,10 +174,9 @@ async def spectate(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-
-    await bot.tree.sync()
-
-    print(f"{bot.user} 팀봇 실행 완료")
+    synced = await bot.tree.sync()
+    print(f"{bot.user} 로그인 완료")
+    print(f"슬래시 명령어 {len(synced)}개 동기화")
 
 
 bot.run(TOKEN)
