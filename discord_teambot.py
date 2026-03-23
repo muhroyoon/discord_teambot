@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import random
 import os
 import asyncio
@@ -221,9 +222,16 @@ async def spectate(interaction: discord.Interaction):
         )
 
 
-# ===== 팀섞기 공지 =====
-@bot.tree.command(name="팀섞기공지", description="15분 뒤 팀섞기 공지")
-async def announce_shuffle(interaction: discord.Interaction):
+# ===== 팀섞기 공지 (N분 버전) =====
+@bot.tree.command(name="팀섞기공지", description="N분 뒤 팀섞기 공지")
+@app_commands.describe(minutes="몇 분 뒤에 팀섞기를 할지 입력")
+async def announce_shuffle(interaction: discord.Interaction, minutes: int):
+
+    if minutes <= 0 or minutes > 60:
+        await interaction.response.send_message(
+            "❌ 1분 ~ 60분 사이로 입력해주세요.", ephemeral=True
+        )
+        return
 
     data = load_data()
     data["count"] += 1
@@ -234,17 +242,19 @@ async def announce_shuffle(interaction: discord.Interaction):
     channel = bot.get_channel(ANNOUNCE_CHANNEL_ID)
 
     if channel is None:
-        await interaction.response.send_message("공지 채널을 찾을 수 없습니다.", ephemeral=True)
+        await interaction.response.send_message(
+            "공지 채널을 찾을 수 없습니다.", ephemeral=True
+        )
         return
 
     now = get_kst_time()
-    target_time = now + timedelta(minutes=15)
+    target_time = now + timedelta(minutes=minutes)
     time_str = target_time.strftime("%H시 %M분")
 
     # 1차 공지
     embed = discord.Embed(
         title="📢 팀섞기 예정",
-        description=f"**15분 뒤인 {time_str}에**\n오늘의 **{count}번째 팀섞기**가 진행됩니다!",
+        description=f"**{minutes}분 뒤인 {time_str}에**\n오늘의 **{count}번째 팀섞기**가 진행됩니다!",
         color=0xf1c40f
     )
 
@@ -257,7 +267,7 @@ async def announce_shuffle(interaction: discord.Interaction):
     await channel.send("@here", embed=embed)
     await interaction.response.send_message("공지 완료!", ephemeral=True)
 
-    await asyncio.sleep(900)
+    await asyncio.sleep(minutes * 60)
 
     # 2차 공지
     embed = discord.Embed(
