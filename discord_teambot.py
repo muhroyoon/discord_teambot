@@ -2,8 +2,16 @@ import discord
 from discord.ext import commands
 import random
 import os
+import asyncio
+import json
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+ANNOUNCE_CHANNEL_ID = 1377672440783704219
+NOGARI_CHANNEL_ID = 1477825330529046580
+DATA_FILE = "shuffle_data.json"
 
 intents = discord.Intents.default()
 intents.members = True
@@ -12,19 +20,64 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
+# ===== 데이터 저장 =====
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {"count": 0}
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
+
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def get_kst_time():
+    return datetime.now(ZoneInfo("Asia/Seoul"))
+
+
+# ===== 팀 생성 =====
 def create_balanced_teams(players, team_size):
-
     random.shuffle(players)
+    return [players[i:i + team_size] for i in range(0, len(players), team_size)]
 
-    teams = [
-        players[i:i + team_size]
-        for i in range(0, len(players), team_size)
-    ]
 
-    return teams
+# ===== 노가리 이동 버튼 =====
+class MoveToNogariView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
 
+    @discord.ui.button(label="🎤 노가리 방으로 이동", style=discord.ButtonStyle.primary)
+    async def move(self, interaction: discord.Interaction, button):
+
+        if interaction.user.voice is None:
+            await interaction.response.send_message(
+                "❌ 음성채널에 들어가 있어야 합니다.", ephemeral=True
+            )
+            return
+
+        target_channel = interaction.guild.get_channel(NOGARI_CHANNEL_ID)
+
+        if target_channel is None:
+            await interaction.response.send_message(
+                "❌ 노가리 채널을 찾을 수 없습니다.", ephemeral=True
+            )
+            return
+
+        try:
+            await interaction.user.move_to(target_channel)
+            await interaction.response.send_message(
+                "✅ 노가리 방으로 이동했습니다!", ephemeral=True
+            )
+        except:
+            await interaction.response.send_message(
+                "❌ 이동 권한이 없습니다.", ephemeral=True
+            )
+
+
+# ===== 다시 섞기 =====
 class ShuffleView(discord.ui.View):
-
     def __init__(self, team_size):
         super().__init__(timeout=None)
         self.team_size = team_size
@@ -65,8 +118,8 @@ class ShuffleView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 
+# ===== 팀 선택 =====
 class TeamSelectView(discord.ui.View):
-
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -129,6 +182,7 @@ class TeamSelectView(discord.ui.View):
         await self.create_team(interaction, 5)
 
 
+# ===== 슬래시 명령어 =====
 @bot.tree.command(name="팀", description="랜덤 팀 생성")
 async def team(interaction: discord.Interaction):
 
@@ -156,17 +210,71 @@ async def spectate(interaction: discord.Interaction):
 
     try:
         await member.edit(nick=new_name)
-
         await interaction.response.send_message(
             f"관전 상태 변경: {new_name}",
             ephemeral=True
         )
-
     except:
         await interaction.response.send_message(
             "닉네임 변경 권한이 없습니다.",
             ephemeral=True
         )
+
+
+# ===== 팀섞기 공지 =====
+@bot.tree.command(name="팀섞기공지", description="15분 뒤 팀섞기 공지")
+async def announce_shuffle(interaction: discord.Interaction):
+
+    data = load_data()
+    data["count"] += 1
+    save_data(data)
+
+    count = data["count"]
+
+    channel = bot.get_channel(ANNOUNCE_CHANNEL_ID)
+
+    if channel is None:
+        await interaction.response.send_message("공지 채널을 찾을 수 없습니다.", ephemeral=True)
+        return
+
+    now = get_kst_time()
+    target_time = now + timedelta(minutes=15)
+    time_str = target_time.strftime("%H시 %M분")
+
+    # 1차 공지
+    embed = discord.Embed(
+        title="📢 팀섞기 예정",
+        description=f"**15분 뒤인 {time_str}에**\n오늘의 **{count}번째 팀섞기**가 진행됩니다!",
+        color=0xf1c40f
+    )
+
+    embed.add_field(
+        name="⏳ 준비해주세요",
+        value="게임 마무리 및 이동 준비 부탁드립니다.",
+        inline=False
+    )
+
+    await channel.send("@here", embed=embed)
+    await interaction.response.send_message("공지 완료!", ephemeral=True)
+
+    await asyncio.sleep(900)
+
+    # 2차 공지
+    embed = discord.Embed(
+        title="🚨 팀섞기 시작!",
+        description=f"지금 **오늘의 {count}번째 팀섞기**가 진행됩니다!",
+        color=0xe74c3c
+    )
+
+    embed.add_field(
+        name="📍 이동",
+        value="아래 버튼을 눌러 노가리 방으로 이동해주세요!",
+        inline=False
+    )
+
+    view = MoveToNogariView()
+
+    await channel.send("@here", embed=embed, view=view)
 
 
 @bot.event
