@@ -107,7 +107,7 @@ class ShuffleView(discord.ui.View):
         players = [
             m.display_name
             for m in members
-            if "[📺관전중]" not in m.display_name
+            if "[📺관전중]" not in m.display_name and not m.bot
         ]
 
         teams = create_balanced_teams(players, self.team_size)
@@ -147,7 +147,7 @@ class TeamSelectView(discord.ui.View):
         players = [
             m.display_name
             for m in members
-            if "[📺관전중]" not in m.display_name
+            if "[📺관전중]" not in m.display_name and not m.bot
         ]
 
         if len(players) < 2:
