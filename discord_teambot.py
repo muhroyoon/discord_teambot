@@ -23,10 +23,19 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ===== 데이터 저장 =====
 def load_data():
+    today = get_kst_time().strftime("%Y-%m-%d")
+
     if not os.path.exists(DATA_FILE):
-        return {"count": 0}
+        return {"date": today, "count": 0}
+
     with open(DATA_FILE, "r") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    # 날짜 바뀌면 초기화
+    if data.get("date") != today:
+        data = {"date": today, "count": 0}
+
+    return data
 
 
 def save_data(data):
@@ -234,6 +243,11 @@ async def announce_shuffle(interaction: discord.Interaction, minutes: int):
         return
 
     data = load_data()
+
+    # 날짜 보장
+    today = get_kst_time().strftime("%Y-%m-%d")
+    data["date"] = today
+
     data["count"] += 1
     save_data(data)
 
