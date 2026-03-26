@@ -207,30 +207,6 @@ async def team(interaction: discord.Interaction):
         view=TeamSelectView()
     )
 
-
-@bot.tree.command(name="관전", description="관전자 토글")
-async def spectate(interaction: discord.Interaction):
-
-    member = interaction.user
-
-    if "[📺관전중]" in member.display_name:
-        new_name = member.display_name.replace("[📺관전중]", "")
-    else:
-        new_name = "[📺관전중]" + member.display_name
-
-    try:
-        await member.edit(nick=new_name)
-        await interaction.response.send_message(
-            f"관전 상태 변경: {new_name}",
-            ephemeral=True
-        )
-    except:
-        await interaction.response.send_message(
-            "닉네임 변경 권한이 없습니다.",
-            ephemeral=True
-        )
-
-
 # ===== 팀섞기 공지 (N분 버전) =====
 @bot.tree.command(name="팀섞기공지", description="N분 뒤 팀섞기 공지")
 @app_commands.describe(minutes="몇 분 뒤에 팀섞기를 할지 입력")
