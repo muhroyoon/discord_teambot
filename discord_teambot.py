@@ -20,20 +20,26 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ===== 시간 =====
+def get_kst_time():
+    return datetime.now(ZoneInfo("Asia/Seoul"))
 
-# ===== 데이터 저장 =====
+# ===== 데이터 =====
 def load_data():
     today = get_kst_time().strftime("%Y-%m-%d")
 
     if not os.path.exists(DATA_FILE):
-        return {"date": today, "count": 0}
+        return {"date": today, "count": 0, "schedule": []}
 
     with open(DATA_FILE, "r") as f:
         data = json.load(f)
 
-    # 날짜 바뀌면 초기화
     if data.get("date") != today:
-        data = {"date": today, "count": 0}
+        data["date"] = today
+        data["count"] = 0
+
+    if "schedule" not in data:
+        data["schedule"] = []
 
     return data
 
@@ -43,17 +49,7 @@ def save_data(data):
         json.dump(data, f)
 
 
-def get_kst_time():
-    return datetime.now(ZoneInfo("Asia/Seoul"))
-
-
-# ===== 팀 생성 =====
-def create_balanced_teams(players, team_size):
-    random.shuffle(players)
-    return [players[i:i + team_size] for i in range(0, len(players), team_size)]
-
-
-# ===== 노가리 이동 버튼 =====
+# ===== 노가리 이동 =====
 class MoveToNogariView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
@@ -62,31 +58,18 @@ class MoveToNogariView(discord.ui.View):
     async def move(self, interaction: discord.Interaction, button):
 
         if interaction.user.voice is None:
-            await interaction.response.send_message(
-                "❌ 음성채널에 들어가 있어야 합니다.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ 음성채널에 있어야 합니다.", ephemeral=True)
             return
 
-        target_channel = interaction.guild.get_channel(NOGARI_CHANNEL_ID)
-
-        if target_channel is None:
-            await interaction.response.send_message(
-                "❌ 노가리 채널을 찾을 수 없습니다.", ephemeral=True
-            )
-            return
+        channel = interaction.guild.get_channel(NOGARI_CHANNEL_ID)
 
         try:
-            await interaction.user.move_to(target_channel)
-            await interaction.response.send_message(
-                "✅ 노가리 방으로 이동했습니다!", ephemeral=True
-            )
+            await interaction.user.move_to(channel)
+            await interaction.response.send_message("✅ 이동 완료!", ephemeral=True)
         except:
-            await interaction.response.send_message(
-                "❌ 이동 권한이 없습니다.", ephemeral=True
-            )
+            await interaction.response.send_message("❌ 이동 실패", ephemeral=True)
 
-
-# ===== 다시 섞기 =====
+# ===== 팀 섞기 UI =====
 class ShuffleView(discord.ui.View):
     def __init__(self, team_size):
         super().__init__(timeout=None)
@@ -96,9 +79,7 @@ class ShuffleView(discord.ui.View):
     async def reshuffle(self, interaction: discord.Interaction, button):
 
         if interaction.user.voice is None:
-            await interaction.response.send_message(
-                "음성채널에 들어가 있어야 합니다.", ephemeral=True
-            )
+            await interaction.response.send_message("음성채널에 있어야 합니다.", ephemeral=True)
             return
 
         channel = interaction.user.voice.channel
@@ -114,85 +95,111 @@ class ShuffleView(discord.ui.View):
 
         embed = discord.Embed(
             title="🎮 랜덤 팀 결과 (다시 섞기)",
-            description=f"음성채널: {channel.name}",
+            description=f"채널: {channel.name}",
             color=0xf39c12
         )
 
         for i, team in enumerate(teams):
-            embed.add_field(
-                name=f"팀 {i+1}",
-                value="\n".join(team),
-                inline=False
-            )
+            embed.add_field(name=f"팀 {i+1}", value="\n".join(team), inline=False)
 
         await interaction.response.edit_message(embed=embed, view=self)
 
+# ===== 팀 생성 함수 =====
+def create_balanced_teams(players, team_size):
+    random.shuffle(players)
+    return [players[i:i + team_size] for i in range(0, len(players), team_size)]
 
-# ===== 팀 선택 =====
-class TeamSelectView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+# ===== 다음 스케줄 =====
+def get_next_schedule():
+    data = load_data()
+    schedule = data.get("schedule", [])
 
-    async def create_team(self, interaction, team_size):
+    now = get_kst_time()
+    targets = []
 
-        if interaction.user.voice is None:
-            await interaction.response.send_message(
-                "❌ 음성채널에 들어가 있어야 합니다.", ephemeral=True
-            )
-            return
+    for t in schedule:
+        hour, minute = map(int, t.split(":"))
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
-        channel = interaction.user.voice.channel
-        members = channel.members
+        if hour < 5:
+            target += timedelta(days=1)
 
-        players = [
-            m.display_name
-            for m in members
-            if "[📺관전중]" not in m.display_name and not m.bot
-        ]
+        if target > now:
+            targets.append(target)
 
-        if len(players) < 2:
-            await interaction.response.send_message(
-                "플레이어가 부족합니다.", ephemeral=True
-            )
-            return
+    if not targets:
+        if not schedule:
+            return None
 
-        teams = create_balanced_teams(players, team_size)
+        first = schedule[0]
+        hour, minute = map(int, first.split(":"))
+        return now.replace(hour=hour, minute=minute, second=0, microsecond=0) + timedelta(days=1)
+
+    return min(targets)
+
+
+# ===== 자동 루프 =====
+async def auto_shuffle_loop():
+    await bot.wait_until_ready()
+
+    channel = bot.get_channel(ANNOUNCE_CHANNEL_ID)
+
+    while not bot.is_closed():
+
+        data = load_data()
+
+        if not data["schedule"]:
+            await asyncio.sleep(60)
+            continue
+
+        next_time = get_next_schedule()
+        now = get_kst_time()
+
+        # count 증가
+        data["count"] += 1
+        save_data(data)
+        count = data["count"]
+
+        announce_time = next_time - timedelta(minutes=20)
+
+        # ===== 1차 공지 =====
+        wait1 = (announce_time - now).total_seconds()
+        if wait1 > 0:
+            await asyncio.sleep(wait1)
 
         embed = discord.Embed(
-            title="🎮 랜덤 팀 결과",
-            description=f"음성채널: {channel.name}",
-            color=0x2ecc71
+            title="⏳ 팀 섞기 카운트다운 시작",
+            description=(
+                f"🕒 **{next_time.strftime('%H시 %M분')}**\n"
+                f"🎮 오늘의 **{count}번째 팀 섞기 진행 예정**\n\n"
+                f"⚠️ 게임 마무리 준비해 주세요!!"
+            ),
+            color=0xf1c40f
         )
 
-        for i, team in enumerate(teams):
-            embed.add_field(
-                name=f"팀 {i+1}",
-                value="\n".join(team),
-                inline=False
-            )
+        embed.set_footer(text="TEAM SHUFFLE SYSTEM")
 
-        view = ShuffleView(team_size)
+        await channel.send("@here", embed=embed)
 
-        await interaction.response.send_message(embed=embed, view=view)
+        # ===== 2차 공지 =====
+        wait2 = (next_time - get_kst_time()).total_seconds()
+        if wait2 > 0:
+            await asyncio.sleep(wait2)
 
-    @discord.ui.button(label="2명 팀", style=discord.ButtonStyle.primary)
-    async def team2(self, interaction, button):
-        await self.create_team(interaction, 2)
+        embed = discord.Embed(
+            title="🚨 팀 섞기 시작!!",
+            description=(
+                f"🔥 오늘의 **{count}번째 팀 섞기가 시작 되었습니다.**\n\n"
+                f"📍 이동해 주세요!!"
+            ),
+            color=0xe74c3c
+        )
 
-    @discord.ui.button(label="3명 팀", style=discord.ButtonStyle.primary)
-    async def team3(self, interaction, button):
-        await self.create_team(interaction, 3)
+        embed.set_footer(text="MOVE NOW")
 
-    @discord.ui.button(label="4명 팀", style=discord.ButtonStyle.success)
-    async def team4(self, interaction, button):
-        await self.create_team(interaction, 4)
+        await channel.send("@here", embed=embed, view=MoveToNogariView())
 
-    @discord.ui.button(label="5명 팀", style=discord.ButtonStyle.secondary)
-    async def team5(self, interaction, button):
-        await self.create_team(interaction, 5)
-
-
-# ===== 슬래시 명령어 =====
+# ===== 팀 섞기 명령어 =====
 @bot.tree.command(name="팀", description="랜덤 팀 생성")
 async def team(interaction: discord.Interaction):
 
@@ -202,86 +209,56 @@ async def team(interaction: discord.Interaction):
         color=0x3498db
     )
 
-    await interaction.response.send_message(
-        embed=embed,
-        view=TeamSelectView()
-    )
+    await interaction.response.send_message(embed=embed, view=TeamSelectView())
 
-# ===== 팀섞기 공지 (N분 버전) =====
-@bot.tree.command(name="팀섞기공지", description="N분 뒤 팀섞기 공지")
-@app_commands.describe(minutes="몇 분 뒤에 팀섞기를 할지 입력")
-async def announce_shuffle(interaction: discord.Interaction, minutes: int):
+# ===== 시간 설정 =====
+@bot.tree.command(name="팀섞기시간설정", description="팀섞기 시간 설정")
+async def set_schedule(interaction: discord.Interaction, times: str):
 
-    if minutes <= 0 or minutes > 60:
-        await interaction.response.send_message(
-            "❌ 1분 ~ 60분 사이로 입력해주세요.", ephemeral=True
-        )
-        return
+    time_list = times.split()
+
+    for t in time_list:
+        try:
+            datetime.strptime(t, "%H:%M")
+        except:
+            await interaction.response.send_message(f"❌ 잘못된 형식: {t}", ephemeral=True)
+            return
 
     data = load_data()
-
-    # 날짜 보장
-    today = get_kst_time().strftime("%Y-%m-%d")
-    data["date"] = today
-
-    data["count"] += 1
+    data["schedule"] = time_list
     save_data(data)
 
-    count = data["count"]
+    await interaction.response.send_message(
+        f"✅ 설정 완료: {' , '.join(time_list)}",
+        ephemeral=True
+    )
 
-    channel = bot.get_channel(ANNOUNCE_CHANNEL_ID)
 
-    if channel is None:
-        await interaction.response.send_message(
-            "공지 채널을 찾을 수 없습니다.", ephemeral=True
-        )
+# ===== 시간 확인 =====
+@bot.tree.command(name="팀섞기시간확인", description="현재 시간 확인")
+async def check_schedule(interaction: discord.Interaction):
+
+    data = load_data()
+    schedule = data.get("schedule", [])
+
+    if not schedule:
+        await interaction.response.send_message("❌ 설정 없음", ephemeral=True)
         return
 
-    now = get_kst_time()
-    target_time = now + timedelta(minutes=minutes)
-    time_str = target_time.strftime("%H시 %M분")
-
-    # 1차 공지
-    embed = discord.Embed(
-        title="📢 팀섞기 예정",
-        description=f"**{minutes}분 뒤인 {time_str}에**\n오늘의 **{count}번째 팀섞기**가 진행됩니다!",
-        color=0xf1c40f
+    await interaction.response.send_message(
+        f"📅 {' , '.join(schedule)}",
+        ephemeral=True
     )
 
-    embed.add_field(
-        name="⏳ 준비해주세요",
-        value="게임 마무리 및 이동 준비 부탁드립니다.",
-        inline=False
-    )
 
-    await channel.send("@here", embed=embed)
-    await interaction.response.send_message("공지 완료!", ephemeral=True)
-
-    await asyncio.sleep(minutes * 60)
-
-    # 2차 공지
-    embed = discord.Embed(
-        title="🚨 팀섞기 시작!",
-        description=f"지금 **오늘의 {count}번째 팀섞기**가 진행됩니다!",
-        color=0xe74c3c
-    )
-
-    embed.add_field(
-        name="📍 이동",
-        value="아래 버튼을 눌러 노가리 방으로 이동해주세요!",
-        inline=False
-    )
-
-    view = MoveToNogariView()
-
-    await channel.send("@here", embed=embed, view=view)
-
-
+# ===== 시작 =====
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
     print(f"{bot.user} 로그인 완료")
     print(f"슬래시 명령어 {len(synced)}개 동기화")
+
+    bot.loop.create_task(auto_shuffle_loop())
 
 
 bot.run(TOKEN)
