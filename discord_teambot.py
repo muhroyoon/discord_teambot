@@ -180,27 +180,27 @@ embed.set_footer(text="TEAM SHUFFLE SYSTEM")
 
 await channel.send("@here", embed=embed)
 
+# ===== 2차 공지 =====
+wait2 = (next_time - get_kst_time()).total_seconds()
+if wait2 > 0:
+    await asyncio.sleep(wait2)
+
 data["count"] += 1
 save_data(data)
 count = data["count"]
 
-        # ===== 2차 공지 =====
-        wait2 = (next_time - get_kst_time()).total_seconds()
-        if wait2 > 0:
-            await asyncio.sleep(wait2)
+embed = discord.Embed(
+    title="🚨 팀 섞기 시작!!",
+    description=(
+        f"🔥 오늘의 **{count}번째 팀 섞기가 시작 되었습니다.**\n\n"
+        f"📍 이동해 주세요!!"
+    ),
+    color=0xe74c3c
+)
 
-        embed = discord.Embed(
-            title="🚨 팀 섞기 시작!!",
-            description=(
-                f"🔥 오늘의 **{count}번째 팀 섞기가 시작 되었습니다.**\n\n"
-                f"📍 이동해 주세요!!"
-            ),
-            color=0xe74c3c
-        )
+embed.set_footer(text="MOVE NOW")
 
-        embed.set_footer(text="MOVE NOW")
-
-        await channel.send("@here", embed=embed, view=MoveToNogariView())
+await channel.send("@here", embed=embed, view=MoveToNogariView())
 
 # ===== 팀 섞기 명령어 =====
 @bot.tree.command(name="팀", description="랜덤 팀 생성")
