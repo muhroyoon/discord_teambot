@@ -155,31 +155,34 @@ async def auto_shuffle_loop():
         next_time = get_next_schedule()
         now = get_kst_time()
 
-        # count 증가
-        data["count"] += 1
-        save_data(data)
-        count = data["count"]
+announce_time = next_time - timedelta(minutes=20)
+now = get_kst_time()
 
-        announce_time = next_time - timedelta(minutes=20)
+wait1 = (announce_time - now).total_seconds()
 
-        # ===== 1차 공지 =====
-        wait1 = (announce_time - now).total_seconds()
-        if wait1 > 0:
-            await asyncio.sleep(wait1)
+if wait1 > 0:
+    await asyncio.sleep(wait1)
+else:
+    print("⚠️ 1차 공지 시간 이미 지남 → 즉시 발송")
 
-        embed = discord.Embed(
-            title="⏳ 팀 섞기 카운트다운 시작",
-            description=(
-                f"🕒 **{next_time.strftime('%H시 %M분')}**\n"
-                f"🎮 오늘의 **{count}번째 팀 섞기 진행 예정**\n\n"
-                f"⚠️ 게임 마무리 준비해 주세요!!"
-            ),
-            color=0xf1c40f
-        )
+# ===== 1차 공지 =====
+embed = discord.Embed(
+    title="⏳ 팀 섞기 카운트다운 시작",
+    description=(
+        f"🕒 **{next_time.strftime('%H시 %M분')}**\n"
+        f"🎮 오늘의 **{data['count'] + 1}번째 팀 섞기 진행 예정**\n\n"
+        f"⚠️ 게임 마무리 준비해 주세요!!"
+    ),
+    color=0xf1c40f
+)
 
-        embed.set_footer(text="TEAM SHUFFLE SYSTEM")
+embed.set_footer(text="TEAM SHUFFLE SYSTEM")
 
-        await channel.send("@here", embed=embed)
+await channel.send("@here", embed=embed)
+
+data["count"] += 1
+save_data(data)
+count = data["count"]
 
         # ===== 2차 공지 =====
         wait2 = (next_time - get_kst_time()).total_seconds()
