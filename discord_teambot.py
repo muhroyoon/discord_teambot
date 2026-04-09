@@ -121,7 +121,7 @@ def get_next_schedule():
         hour, minute = map(int, t.split(":"))
         target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
-        if hour < 5: and target < now:
+        if hour < 5 and target < now:
             target += timedelta(days=1)
 
         if target > now:
