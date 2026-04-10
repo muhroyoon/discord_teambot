@@ -70,16 +70,14 @@ class MoveToNogariView(discord.ui.View):
             await interaction.response.send_message("❌ 이동 실패", ephemeral=True)
 
 # ===== 팀 섞기 UI =====
-class ShuffleView(discord.ui.View):
-    def __init__(self, team_size):
+class TeamSelectView(discord.ui.View):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.team_size = team_size
 
-    @discord.ui.button(label="🔄 다시 섞기", style=discord.ButtonStyle.green)
-    async def reshuffle(self, interaction: discord.Interaction, button):
+    async def create_team(self, interaction, team_size):
 
         if interaction.user.voice is None:
-            await interaction.response.send_message("음성채널에 있어야 합니다.", ephemeral=True)
+            await interaction.response.send_message("❌ 음성채널에 있어야 합니다.", ephemeral=True)
             return
 
         channel = interaction.user.voice.channel
@@ -91,19 +89,40 @@ class ShuffleView(discord.ui.View):
             if "[📺관전중]" not in m.display_name and not m.bot
         ]
 
-        teams = create_balanced_teams(players, self.team_size)
+        if len(players) < 2:
+            await interaction.response.send_message("플레이어 부족", ephemeral=True)
+            return
+
+        random.shuffle(players)
+        teams = [players[i:i + team_size] for i in range(0, len(players), team_size)]
 
         embed = discord.Embed(
-            title="🎮 랜덤 팀 결과 (다시 섞기)",
+            title="🎮 랜덤 팀 결과",
             description=f"채널: {channel.name}",
-            color=0xf39c12
+            color=0x2ecc71
         )
 
         for i, team in enumerate(teams):
             embed.add_field(name=f"팀 {i+1}", value="\n".join(team), inline=False)
 
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.send_message(embed=embed)
 
+    @discord.ui.button(label="2명 팀", style=discord.ButtonStyle.primary)
+    async def team2(self, interaction, button):
+        await self.create_team(interaction, 2)
+
+    @discord.ui.button(label="3명 팀", style=discord.ButtonStyle.primary)
+    async def team3(self, interaction, button):
+        await self.create_team(interaction, 3)
+
+    @discord.ui.button(label="4명 팀", style=discord.ButtonStyle.success)
+    async def team4(self, interaction, button):
+        await self.create_team(interaction, 4)
+
+    @discord.ui.button(label="5명 팀", style=discord.ButtonStyle.secondary)
+    async def team5(self, interaction, button):
+        await self.create_team(interaction, 5)
+        
 # ===== 팀 생성 함수 =====
 def create_balanced_teams(players, team_size):
     random.shuffle(players)
