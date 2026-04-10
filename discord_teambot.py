@@ -54,7 +54,7 @@ class MoveToNogariView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
 
-    @discord.ui.button(label="🎤 노가리 방으로 이동", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🎤 팀섞대기방으로 이동", style=discord.ButtonStyle.primary)
     async def move(self, interaction: discord.Interaction, button):
 
         if interaction.user.voice is None:
@@ -176,7 +176,6 @@ async def auto_shuffle_loop():
             color=0xf1c40f
         )
 
-        embed.set_footer(text="TEAM SHUFFLE SYSTEM")
         await channel.send("@here", embed=embed)
 
         # ===== 2차 공지 =====
@@ -197,7 +196,6 @@ async def auto_shuffle_loop():
             color=0xe74c3c
         )
 
-        embed.set_footer(text="MOVE NOW")
         await channel.send("@here", embed=embed, view=MoveToNogariView())
 
 # ===== 팀 섞기 명령어 =====
