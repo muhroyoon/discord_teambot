@@ -12,7 +12,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 ANNOUNCE_CHANNEL_ID = 1377672440783704219
 NOGARI_CHANNEL_ID = 1477825330529046580
-DATA_FILE = "shuffle_data.json"
+DATA_FILE = "/data/shuffle_data.json"
 
 intents = discord.Intents.default()
 intents.members = True
