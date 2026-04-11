@@ -174,7 +174,7 @@ async def auto_shuffle_loop():
         next_time = get_next_schedule()
         now = get_kst_time()
 
-        announce_time = next_time - timedelta(minutes=20)
+        announce_time = next_time - timedelta(minutes=30)
         now = get_kst_time()
 
         wait1 = (announce_time - now).total_seconds()
