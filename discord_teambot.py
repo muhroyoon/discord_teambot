@@ -163,26 +163,45 @@ async def auto_shuffle_loop():
 
     channel = bot.get_channel(ANNOUNCE_CHANNEL_ID)
 
+    last_schedule = []
+
     while not bot.is_closed():
 
         data = load_data()
+        schedule = data.get("schedule", [])
 
-        if not data["schedule"]:
-            await asyncio.sleep(60)
+        # 스케줄 없으면 대기
+        if not schedule:
+            await asyncio.sleep(5)
             continue
 
+        # 스케줄 변경 감지
+        if schedule != last_schedule:
+            print("📅 스케줄 변경 감지 → 재시작")
+            last_schedule = schedule.copy()
+
         next_time = get_next_schedule()
-        now = get_kst_time()
 
-        announce_time = next_time - timedelta(minutes=30)
-        now = get_kst_time()
+        if not next_time:
+            await asyncio.sleep(5)
+            continue
 
-        wait1 = (announce_time - now).total_seconds()
+        # ===== 1차 공지 대기 (30분 전) =====
+        while True:
+            now = get_kst_time()
 
-        if wait1 > 0:
-            await asyncio.sleep(wait1)
-        else:
-            print("⚠️ 1차 공지 시간 이미 지남 → 즉시 발송")
+            # 🔥 스케줄 변경되면 즉시 탈출
+            if load_data().get("schedule") != last_schedule:
+                break
+
+            if now >= next_time - timedelta(minutes=30):
+                break
+
+            await asyncio.sleep(5)
+
+        # 변경됐으면 다시 루프 시작
+        if load_data().get("schedule") != last_schedule:
+            continue
 
         # ===== 1차 공지 =====
         embed = discord.Embed(
@@ -197,19 +216,32 @@ async def auto_shuffle_loop():
 
         await channel.send("@here", embed=embed)
 
-        # ===== 2차 공지 =====
-        wait2 = (next_time - get_kst_time()).total_seconds()
-        if wait2 > 0:
-            await asyncio.sleep(wait2)
+        # ===== 2차 공지 대기 =====
+        while True:
+            now = get_kst_time()
 
+            # 🔥 스케줄 변경 감지
+            if load_data().get("schedule") != last_schedule:
+                break
+
+            if now >= next_time:
+                break
+
+            await asyncio.sleep(5)
+
+        # 변경됐으면 다시 시작
+        if load_data().get("schedule") != last_schedule:
+            continue
+
+        # ===== 팀 섞기 실행 =====
+        data = load_data()
         data["count"] += 1
         save_data(data)
-        count = data["count"]
 
         embed = discord.Embed(
             title="🚨 팀 섞기 시작!!",
             description=(
-                f"🔥 오늘의 **{count}번째 팀 섞기가 시작 되었습니다.**\n\n"
+                f"🔥 오늘의 **{data['count']}번째 팀 섞기가 시작 되었습니다.**\n\n"
                 f"📍 이동해 주세요!!"
             ),
             color=0xe74c3c
