@@ -156,6 +156,32 @@ def get_next_schedule():
 
     return min(targets)
 
+# ===== 차수 계산 =====
+def get_schedule_order(target_time):
+    data = load_data()
+    schedule = data.get("schedule", [])
+
+    parsed_times = []
+
+    for t in schedule:
+        hour, minute = map(int, t.split(":"))
+
+        # 새벽 시간 보정
+        sort_key = hour if hour >= 5 else hour + 24
+
+        parsed_times.append((t, sort_key))
+
+    # 정렬
+    parsed_times.sort(key=lambda x: x[1])
+
+    sorted_times = [t[0] for t in parsed_times]
+
+    target_str = target_time.strftime("%H:%M")
+
+    if target_str in sorted_times:
+        return sorted_times.index(target_str) + 1
+
+    return 1
 
 # ===== 자동 루프 =====
 async def auto_shuffle_loop():
@@ -204,11 +230,13 @@ async def auto_shuffle_loop():
             continue
 
         # ===== 1차 공지 =====
+        order = get_schedule_order(next_time)
+
         embed = discord.Embed(
             title="⏳ 팀 섞기 카운트다운 시작",
             description=(
                 f"🕒 **{next_time.strftime('%H시 %M분')}**\n"
-                f"🎮 오늘의 **{data['count'] + 1}번째 팀 섞기 진행 예정**\n\n"
+                f"🎮 오늘의 **{order}번째 팀 섞기 진행 예정**\n\n"
                 f"⚠️ 게임 마무리 준비해 주세요!!"
             ),
             color=0xf1c40f
@@ -238,17 +266,18 @@ async def auto_shuffle_loop():
         data["count"] += 1
         save_data(data)
 
+        order = get_schedule_order(next_time)
+
         embed = discord.Embed(
             title="🚨 팀 섞기 시작!!",
             description=(
-                f"🔥 오늘의 **{data['count']}번째 팀 섞기가 시작 되었습니다.**\n\n"
+                f"🔥 오늘의 **{order}번째 팀 섞기가 시작 되었습니다.**\n\n"
                 f"📍 이동해 주세요!!"
             ),
             color=0xe74c3c
         )
 
         await channel.send("@here", embed=embed, view=MoveToNogariView())
-
 # ===== 팀 섞기 명령어 =====
 @bot.tree.command(name="팀", description="랜덤 팀 생성")
 async def team(interaction: discord.Interaction):
